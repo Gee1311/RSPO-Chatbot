@@ -1,0 +1,7 @@
+{
+  "name": "RSPO Chatbot",
+  "description": "An AI-powered assistant designed to help stakeholders navigate the complex RSPO Principles & Criteria (P&C), providing clear explanations, auditor expectations, and practical compliance steps.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
