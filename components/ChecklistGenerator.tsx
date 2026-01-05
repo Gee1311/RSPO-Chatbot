@@ -472,13 +472,21 @@ const ChecklistGenerator: React.FC<ChecklistGeneratorProps> = ({ activeStandard,
           {view === 'review' && activeReviewAudit && (
             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700 text-center">
-                  <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Audit Score</p>
-                  <p className="text-xl font-black text-emerald-600">{stats.score}%</p>
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
+                  <p className="text-[10px] font-black text-emerald-600">{stats.score}%</p>
+                  <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Audit Score</p>
                 </div>
-                <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700 text-center">
-                  <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Completion</p>
-                  <p className="text-xl font-black text-slate-600">{activeReviewAudit.completion}%</p>
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
+                  <p className="text-[10px] font-black text-slate-800 dark:text-slate-100">{stats.compliant}</p>
+                  <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Compliant</p>
+                </div>
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
+                  <p className="text-[10px] font-black text-rose-500">{stats.nonCompliant}</p>
+                  <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">NC Findings</p>
+                </div>
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
+                  <p className="text-[10px] font-black text-slate-800 dark:text-slate-100">{stats.completion}%</p>
+                  <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Completion</p>
                 </div>
               </div>
               <div className="space-y-4">
@@ -554,16 +562,21 @@ const ChecklistGenerator: React.FC<ChecklistGeneratorProps> = ({ activeStandard,
                 <input type="text" value={auditName} onChange={(e) => setAuditName(e.target.value)} className="w-full bg-transparent text-white font-bold text-lg outline-none border-b border-white/10 focus:border-emerald-500 py-1" placeholder="Audit Identification Name"/>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700 text-center">
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Current Score</p>
-                  <p className="text-xl font-black text-emerald-600">{stats.score}%</p>
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
+                  <p className="text-[10px] font-black text-emerald-600">{stats.score}%</p>
+                  <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Audit Score</p>
                 </div>
-                <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 text-center col-span-3 flex items-center justify-between px-6">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Progress</span>
-                  <div className="flex-1 mx-4 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${stats.completion}%` }}></div>
-                  </div>
-                  <span className="text-xs font-black text-emerald-600">{stats.completion}%</span>
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
+                  <p className="text-[10px] font-black text-slate-800 dark:text-slate-100">{stats.compliant}</p>
+                  <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Compliant</p>
+                </div>
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
+                  <p className="text-[10px] font-black text-rose-500">{stats.nonCompliant}</p>
+                  <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">NC Findings</p>
+                </div>
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
+                  <p className="text-[10px] font-black text-slate-800 dark:text-slate-100">{stats.completion}%</p>
+                  <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Completion</p>
                 </div>
               </div>
               <div className="space-y-4">
