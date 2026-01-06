@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import StandardSelector from './StandardSelector';
 import LanguageSelector from './LanguageSelector';
@@ -37,19 +38,48 @@ const Header: React.FC<HeaderProps> = ({
       <div className="max-w-4xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between gap-2 relative">
           
-          {/* Logo Section */}
-          <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-            <div className="bg-white dark:bg-slate-100 p-1.5 rounded-lg shadow-inner">
-              <i className="fa-solid fa-seedling text-emerald-800 text-base md:text-xl"></i>
-            </div>
-            <div className="hidden xs:block text-left">
-              <h1 className="font-bold text-sm md:text-lg leading-none">RSPO Chatbot</h1>
-              <p className="text-[9px] opacity-70 mt-0.5 uppercase tracking-wider font-semibold">Enterprise</p>
+          {/* Menu & Logo Section */}
+          <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
+            <button 
+              onClick={() => onShowModal('history')}
+              className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 transition-all active:scale-90"
+              aria-label="Toggle Menu"
+            >
+              <i className="fa-solid fa-bars text-xl"></i>
+            </button>
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="bg-white dark:bg-slate-100 p-1.5 rounded-lg shadow-inner">
+                <i className="fa-solid fa-seedling text-emerald-800 text-base md:text-xl"></i>
+              </div>
+              <div className="hidden xs:block text-left">
+                <h1 className="font-bold text-sm md:text-lg leading-none">RSPO Chatbot</h1>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className={`text-[8px] font-black uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-md border ${
+                    user.tier === 'Enterprise Pro' 
+                      ? 'bg-emerald-400/20 border-emerald-400 text-emerald-300' 
+                      : 'bg-slate-700/50 border-slate-500 text-slate-300'
+                  }`}>
+                    {user.tier}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
           
           <div className="flex items-center gap-2 md:gap-3 flex-1 justify-end">
             <div className="flex items-center gap-2">
+              {/* Pro Upgrade Button - Visible for Free tier users */}
+              {user.tier === 'Free' && (
+                <button 
+                  onClick={() => onShowModal('settings')}
+                  className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-white px-3 py-1.5 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-900/30 transition-all active:scale-95 border border-amber-300/30 animate-pulse-slow"
+                >
+                  <i className="fa-solid fa-crown text-[8px] md:text-[10px]"></i>
+                  <span className="hidden sm:inline">Upgrade</span>
+                  <span className="sm:hidden">Pro</span>
+                </button>
+              )}
+
               <button
                 onClick={onToggleTheme}
                 className="w-8 h-8 rounded-lg bg-emerald-900/60 hover:bg-emerald-700/80 flex items-center justify-center transition-all border border-emerald-500/30 shadow-sm"
@@ -57,6 +87,7 @@ const Header: React.FC<HeaderProps> = ({
               >
                 <i className={`fa-solid ${theme === 'light' ? 'fa-moon' : 'fa-sun'} text-[10px]`}></i>
               </button>
+              
               <div className="hidden xs:flex items-center gap-2">
                 <LanguageSelector current={language} onSelect={onLanguageChange} />
                 <StandardSelector selectedId={activeStandard.id} onSelect={onStandardChange} />
@@ -109,10 +140,16 @@ const Header: React.FC<HeaderProps> = ({
                          </div>
                       </div>
                       <button 
-                        onClick={() => { onExportHistory(); setShowProfile(false); }} 
+                        onClick={() => { onShowModal('settings'); setShowProfile(false); }} 
                         className="w-full text-left px-4 py-2 text-xs text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-3"
                       >
-                        <i className="fa-solid fa-file-export text-emerald-600 w-4 text-center"></i> Export Audit Log
+                        <i className="fa-solid fa-gear text-emerald-600 w-4 text-center"></i> Account Settings
+                      </button>
+                      <button 
+                        onClick={() => { onExportHistory(); setShowProfile(false); }} 
+                        className="w-full text-left px-4 py-2 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-3"
+                      >
+                        <i className="fa-solid fa-file-export text-slate-400 w-4 text-center"></i> Export Audit Log
                       </button>
                       <button 
                         onClick={() => { onClearHistory(); setShowProfile(false); }} 
@@ -137,6 +174,15 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
+      <style>{`
+        @keyframes pulse-slow {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.9; transform: scale(1.02); }
+        }
+        .animate-pulse-slow {
+          animation: pulse-slow 3s ease-in-out infinite;
+        }
+      `}</style>
     </header>
   );
 };

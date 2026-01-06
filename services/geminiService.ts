@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { SYSTEM_INSTRUCTION, MOCK_KNOWLEDGE_BASE, LANGUAGE_MAP } from "../constants";
 import { Standard, Language, PolicyDocument, RSPOClause } from "../types";
@@ -12,11 +13,29 @@ export const askRSPOAssistant = async (
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const targetLanguageName = LANGUAGE_MAP[language] || 'English';
+
+  // Identify Mode if present
+  let activeMode = 'GENERAL';
+  let cleanQuestion = question;
+  
+  if (question.startsWith('MODE_TECHNICAL:')) {
+    activeMode = 'TECHNICAL';
+    cleanQuestion = question.replace('MODE_TECHNICAL:', '').trim();
+  } else if (question.startsWith('MODE_ACTIVITY:')) {
+    activeMode = 'ACTIVITY';
+    cleanQuestion = question.replace('MODE_ACTIVITY:', '').trim();
+  } else if (question.startsWith('MODE_ARGUMENTATIVE:')) {
+    activeMode = 'ARGUMENTATIVE';
+    cleanQuestion = question.replace('MODE_ARGUMENTATIVE:', '').trim();
+  } else if (question.startsWith('MODE_CONCISE:')) {
+    activeMode = 'CONCISE';
+    cleanQuestion = question.replace('MODE_CONCISE:', '').trim();
+  }
   
   const matchingClauses = MOCK_KNOWLEDGE_BASE.filter(clause => 
     clause.standardId === activeStandard.id && (
-      question.toLowerCase().includes(clause.id.toLowerCase()) || 
-      question.toLowerCase().includes(clause.title.toLowerCase())
+      cleanQuestion.toLowerCase().includes(clause.id.toLowerCase()) || 
+      cleanQuestion.toLowerCase().includes(clause.title.toLowerCase())
     )
   );
 
@@ -26,6 +45,7 @@ export const askRSPOAssistant = async (
 
   const contextPrompt = `
 Active Standard: ${activeStandard.name} (${activeStandard.year})
+OPERATIONAL_MODE: ${activeMode}
 OUTPUT_LANGUAGE: ${targetLanguageName}
 ${policyContext}
 
@@ -33,13 +53,15 @@ Retrieved RSPO Context Documents:
 ${matchingClauses.length > 0 
   ? matchingClauses.map(c => `ID: ${c.id}, Content: ${c.description}`).join('\n')
   : 'Search relevant RSPO requirements for ' + activeStandard.shortName}
+
+REMINDER: Apply the ${activeMode} framework as defined in your instructions.
 `;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: [{
-        parts: [{ text: `${contextPrompt}\n\nIMPORTANT: YOU MUST RESPOND ONLY IN ${targetLanguageName.toUpperCase()}.\n\nUser Question: ${question}` }]
+        parts: [{ text: `${contextPrompt}\n\nIMPORTANT: YOU MUST RESPOND ONLY IN ${targetLanguageName.toUpperCase()}.\n\nUser Question: ${cleanQuestion}` }]
       }],
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,

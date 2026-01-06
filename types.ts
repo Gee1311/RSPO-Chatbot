@@ -13,7 +13,17 @@ export interface User {
   name: string;
   email: string;
   avatar?: string;
+  organization?: string;
   role: 'auditor' | 'manager' | 'smallholder' | 'demo';
+  tier?: 'Free' | 'Enterprise Pro';
+  subscriptionStatus?: 'Active' | 'Expired' | 'Pending';
+  stripeKey?: string; // For linking the user's specific Stripe account
+}
+
+export interface MessageOption {
+  label: string;
+  value: string;
+  icon: string;
 }
 
 export interface Message {
@@ -22,6 +32,15 @@ export interface Message {
   content: string;
   timestamp: Date;
   isNCDraft?: boolean;
+  options?: MessageOption[];
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: Message[];
+  timestamp: number;
+  standardShortName: string;
 }
 
 export interface RSPOClause {
@@ -69,4 +88,4 @@ export enum AppStatus {
   AUTHENTICATING = 'authenticating'
 }
 
-export type ModalType = 'privacy' | 'terms' | 'contact' | 'vault' | 'nc-drafter' | 'checklist' | null;
+export type ModalType = 'privacy' | 'terms' | 'contact' | 'vault' | 'nc-drafter' | 'checklist' | 'history' | 'settings' | null;

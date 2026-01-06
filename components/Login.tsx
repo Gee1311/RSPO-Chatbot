@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { User, ModalType } from '../types';
 
@@ -19,6 +20,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowModal }) => {
         name: 'Demo Auditor',
         email: 'auditor@demo.rspo.org',
         role: 'demo',
+        tier: 'Free',
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix'
       });
       setIsLoading(false);
@@ -34,6 +36,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowModal }) => {
         name: 'John Doe',
         email: 'john.doe@gmail.com',
         role: 'manager',
+        tier: 'Enterprise Pro',
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John'
       });
       setIsLoading(false);
@@ -100,16 +103,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowModal }) => {
             Audit-grade security for RSPO certification processes
           </p>
         </div>
-      </div>
-      
-      <div className="mt-8 flex items-center gap-8 text-[11px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">
-        <button onClick={() => onShowModal('contact')} className="hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors flex items-center gap-2">
-          <i className="fa-solid fa-headset"></i> Support
-        </button>
-        <span className="w-1.5 h-1.5 bg-slate-300 dark:bg-slate-800 rounded-full"></span>
-        <button onClick={() => onShowModal('privacy')} className="hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors">Privacy</button>
-        <span className="w-1.5 h-1.5 bg-slate-300 dark:bg-slate-800 rounded-full"></span>
-        <button onClick={() => onShowModal('terms')} className="hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors">Terms</button>
       </div>
     </div>
   );
