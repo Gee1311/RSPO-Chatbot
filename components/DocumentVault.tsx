@@ -336,7 +336,8 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ policies, onAdd, onRemove
                 </div>
               )}
 
-              {!isScanning && status !== 'uploading' && status !== 'processing' && (
+              {/* Fix: Using a positive status check to avoid unintended type narrowing overlap comparison errors */}
+              {!isScanning && (status === 'idle' || status === 'error' || status === 'success') && (
                 <div className="space-y-5 animate-in slide-in-from-top-2 duration-300">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-4">
@@ -352,15 +353,20 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ policies, onAdd, onRemove
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase ml-1 tracking-wider">Audit Category</label>
-                        <select 
-                          value={type}
-                          onChange={(e) => setType(e.target.value as any)}
-                          className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none appearance-none cursor-pointer shadow-sm text-slate-900 dark:text-slate-100"
-                        >
-                          <option value="SOP">SOP (Standard Operating Procedure)</option>
-                          <option value="Policy">High-Level Policy / Commitment</option>
-                          <option value="Report">Internal Audit / Field Report</option>
-                        </select>
+                        <div className="relative">
+                          <select 
+                            value={type}
+                            onChange={(e) => setType(e.target.value as any)}
+                            className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none appearance-none cursor-pointer shadow-sm text-slate-900 dark:text-slate-100 pr-10"
+                          >
+                            <option value="SOP">SOP (Standard Operating Procedure)</option>
+                            <option value="Policy">High-Level Policy / Commitment</option>
+                            <option value="Report">Internal Audit / Field Report</option>
+                          </select>
+                          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                            <i className="fa-solid fa-chevron-down text-xs"></i>
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <div className="space-y-1.5">
@@ -404,9 +410,10 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ policies, onAdd, onRemove
 
                   <canvas ref={canvasRef} className="hidden" />
                   
+                  {/* Fixed redundant status checks that caused type narrowing overlap errors */}
                   <button 
                     onClick={handleAdd}
-                    disabled={!name || !content || status === 'processing' || status === 'uploading'}
+                    disabled={!name || !content}
                     className="w-full bg-slate-900 dark:bg-emerald-700 hover:bg-emerald-900 dark:hover:bg-emerald-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white font-bold py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
                   >
                     <i className="fa-solid fa-cloud-arrow-up text-emerald-400 dark:text-emerald-200"></i>

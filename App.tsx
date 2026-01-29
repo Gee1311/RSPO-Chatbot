@@ -11,11 +11,10 @@ import ChecklistGenerator from './components/ChecklistGenerator';
 import FloatingToolBelt from './components/FloatingToolBelt';
 import HistoryDrawer from './components/HistoryDrawer';
 import SettingsModal from './components/SettingsModal';
-import { Message, AppStatus, Standard, User, ModalType, Language, PolicyDocument, SavedAudit, ChatSession, MessageOption } from './types';
-import { STANDARDS, DISCLAIMER, LANGUAGE_MAP } from './constants';
+import { Message, AppStatus, Standard, User, ModalType, Language, PolicyDocument, SavedAudit, ChatSession, MessageOption, SettingsTab, Invoice } from './types';
+import { STANDARDS, DISCLAIMER, LANGUAGE_MAP, PLANS } from './constants';
 import { askRSPOAssistant } from './services/geminiService';
 
-const FREE_LIMIT = 10;
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
 
 const ONBOARDING_OPTIONS: MessageOption[] = [
@@ -32,31 +31,43 @@ const PRIMING_MESSAGES: Record<string, string> = {
   'CONCISE': "Ready for **General Enquiry**. How can I help you with the RSPO process today?"
 };
 
+const DEFAULT_USER_PREFS = {
+  preferences: { theme: 'light' as const, language: 'en' as const, autoSave: true },
+  notifications: { billing: true, compliance: true, system: true },
+  invoices: []
+};
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('rspo_user');
-    return saved ? JSON.parse(saved) : null;
+    if (!saved) return null;
+    const parsed = JSON.parse(saved);
+    const freeLimit = PLANS.find(p => p.tier === 'Free')?.tokens || 5000;
+    return { 
+      ...DEFAULT_USER_PREFS, 
+      tokensUsed: 0, 
+      tokenLimit: freeLimit, 
+      tier: 'Free',
+      ...parsed 
+    };
   });
   
-  const [searchStats, setSearchStats] = useState(() => {
-    const saved = localStorage.getItem('rspo_usage_stats');
+  const [tokenStats, setTokenStats] = useState(() => {
+    const saved = localStorage.getItem('rspo_token_stats');
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Date.now() - parsed.weekStart > WEEK_IN_MS) {
-        return { count: 0, weekStart: Date.now() };
+        return { used: 0, weekStart: Date.now() };
       }
       return parsed;
     }
-    return { count: 0, weekStart: Date.now() };
+    return { used: 0, weekStart: Date.now() };
   });
 
   const [activeStandard, setActiveStandard] = useState<Standard>(STANDARDS[0]);
-  const [language, setLanguage] = useState<Language>('en');
+  const [language, setLanguage] = useState<Language>(user?.preferences?.language || 'en');
   const [policies, setPolicies] = useState<PolicyDocument[]>([]);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('rspo_theme');
-    return (saved as 'light' | 'dark') || 'light';
-  });
+  const [theme, setTheme] = useState<'light' | 'dark'>(user?.preferences?.theme || 'light');
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeMode, setActiveMode] = useState<string>('CONCISE');
@@ -81,11 +92,15 @@ const App: React.FC = () => {
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('profile');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    localStorage.setItem('rspo_usage_stats', JSON.stringify(searchStats));
-  }, [searchStats]);
+    localStorage.setItem('rspo_token_stats', JSON.stringify(tokenStats));
+    if (user && user.tokensUsed !== tokenStats.used) {
+      handleUpdateUser({ ...user, tokensUsed: tokenStats.used });
+    }
+  }, [tokenStats.used]);
 
   useEffect(() => {
     localStorage.setItem('rspo_chat_sessions', JSON.stringify(chatSessions));
@@ -129,12 +144,28 @@ const App: React.FC = () => {
     ]);
   };
 
-  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  const toggleTheme = () => {
+    const next = theme === 'light' ? 'dark' : 'light';
+    setTheme(next);
+    if (user) {
+      handleUpdateUser({ ...user, preferences: { ...user.preferences, theme: next } });
+    }
+  };
 
   const handleLanguageChange = (newLang: Language) => {
     setLanguage(newLang);
     const langName = LANGUAGE_MAP[newLang];
     handleSend(`System: Language switched to ${langName}. Please acknowledge.`);
+    if (user) {
+      handleUpdateUser({ ...user, preferences: { ...user.preferences, language: newLang } });
+    }
+  };
+
+  const handleUpdateUser = (updatedUser: User) => {
+    setUser(updatedUser);
+    localStorage.setItem('rspo_user', JSON.stringify(updatedUser));
+    setTheme(updatedUser.preferences.theme);
+    setLanguage(updatedUser.preferences.language);
   };
 
   const handleNewChat = () => {
@@ -161,11 +192,15 @@ const App: React.FC = () => {
     setActiveModal(null);
   };
 
+  const calculateTokenCost = (inputStr: string, outputStr: string): number => {
+    // Basic heuristic: 1 token per 4 characters
+    return Math.ceil((inputStr.length + outputStr.length) / 4);
+  };
+
   const handleSend = async (forcedQuery?: string, isNC?: boolean) => {
     const query = forcedQuery || input;
-    if (!query.trim() || status === AppStatus.LOADING) return;
+    if (!query.trim() || status === AppStatus.LOADING || !user) return;
 
-    // Command handling: Reset or Change Mode
     const cleanCmd = query.trim().toLowerCase();
     if (cleanCmd === '/restart' || cleanCmd === 'change mode' || cleanCmd === '/mode') {
       setInput('');
@@ -173,14 +208,13 @@ const App: React.FC = () => {
       return;
     }
 
-    if (user?.tier === 'Free' && searchStats.count >= FREE_LIMIT && !query.startsWith('System:')) {
-      handleShowModal('settings');
+    if (tokenStats.used >= user.tokenLimit && !query.startsWith('System:')) {
+      handleShowModal('settings', 'billing');
       return;
     }
 
     let finalQuery = query;
 
-    // Injected Mode logic
     if (!query.startsWith('System:') && !query.startsWith('MODE_')) {
       finalQuery = `MODE_${activeMode}: ${query}`;
     }
@@ -195,10 +229,6 @@ const App: React.FC = () => {
         isNCDraft: isNC
       };
       setMessages(prev => [...prev, userMsg]);
-      
-      if (user?.tier === 'Free') {
-        setSearchStats(prev => ({ ...prev, count: prev.count + 1 }));
-      }
     }
 
     setInput('');
@@ -206,7 +236,8 @@ const App: React.FC = () => {
 
     try {
       const historyArr = messages.map(m => ({ role: m.role, content: m.content }));
-      const response = await askRSPOAssistant(finalQuery, activeStandard, language, policies, historyArr);
+      // Pass user tier to allow model selection in service
+      const response = await askRSPOAssistant(finalQuery, activeStandard, language, user.tier, policies, historyArr);
       
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -216,6 +247,11 @@ const App: React.FC = () => {
       };
       
       setMessages(prev => [...prev, assistantMsg]);
+
+      // Estimate and charge tokens
+      const cost = calculateTokenCost(finalQuery, response);
+      setTokenStats(prev => ({ ...prev, used: prev.used + cost }));
+
     } catch (error) {
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
@@ -229,13 +265,9 @@ const App: React.FC = () => {
   };
 
   const handleOptionClick = (option: MessageOption) => {
-    // 1. Remove options from the last message
     setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, options: undefined } : m));
-    
-    // 2. Set the internal persistent mode
     setActiveMode(option.value);
 
-    // 3. Add the user selection and the Priming Message from the interaction script
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -264,31 +296,52 @@ const App: React.FC = () => {
     setActiveModal(null);
   };
 
-  const handleShowModal = (type: ModalType) => {
+  const handleShowModal = (type: ModalType, tab: SettingsTab = 'profile') => {
     const premiumTools: ModalType[] = ['vault', 'checklist', 'nc-drafter'];
-    if (user?.tier === 'Free' && premiumTools.includes(type)) {
-      if (window.confirm("UPGRADE REQUIRED\n\nThe Document Vault, Smart Checklist, and NC Drafter are exclusive to the Enterprise Pro plan.\n\nWould you like to upgrade now?")) {
+    
+    // Check for "Professional and above" threshold for premium tools
+    const hasPremiumAccess = user?.tier === 'Professional' || user?.tier === 'Enterprise';
+
+    if (!hasPremiumAccess && premiumTools.includes(type)) {
+      if (window.confirm("UPGRADE REQUIRED\n\nThe Document Vault, Smart Checklist, and NC Drafter are exclusive to Professional & Enterprise plans.\n\nWould you like to view our intelligence refill options?")) {
+        setSettingsTab('billing');
         setActiveModal('settings');
       }
       return;
     }
+    
+    if (type === 'settings') {
+      setSettingsTab(tab);
+    }
+    
     setActiveModal(type);
   };
 
   if (!user) {
     return (
       <div className={theme === 'dark' ? 'dark' : ''}>
-        <Login onLogin={(u) => { setUser(u); localStorage.setItem('rspo_user', JSON.stringify(u)); }} onShowModal={setActiveModal} />
+        <Login onLogin={(u) => { 
+          const freePlan = PLANS.find(p => p.tier === 'Free')!;
+          const fullUser: User = { 
+            ...DEFAULT_USER_PREFS, 
+            ...u, 
+            tokenLimit: freePlan.tokens, 
+            tokensUsed: 0, 
+            tier: 'Free' as const,
+            invoices: []
+          };
+          handleUpdateUser(fullUser); 
+        }} onShowModal={setActiveModal} />
         <LegalModal type={activeModal} onClose={() => setActiveModal(null)} />
       </div>
     );
   }
 
-  const isLimitReached = user.tier === 'Free' && searchStats.count >= FREE_LIMIT;
+  const isLimitReached = tokenStats.used >= user.tokenLimit;
 
   return (
     <>
-      <div className="flex flex-col h-full max-w-4xl mx-auto border-x border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl relative overflow-hidden transition-colors">
+      <div className="flex flex-col h-full w-full bg-white dark:bg-slate-900 relative overflow-hidden transition-colors">
         <Header 
           activeStandard={activeStandard} 
           language={language}
@@ -305,8 +358,8 @@ const App: React.FC = () => {
         
         <ClauseSearch activeStandard={activeStandard} onSelect={(q) => handleSend(q)} />
 
-        <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 bg-slate-50/50 dark:bg-slate-950/40 relative">
-          <div className="max-w-2xl mx-auto">
+        <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50/50 dark:bg-slate-950/40 relative scrollbar-hide">
+          <div className="max-w-6xl mx-auto">
             {messages.map(msg => <MessageBubble key={msg.id} message={msg} onOptionClick={handleOptionClick} />)}
             {status === AppStatus.LOADING && (
               <div className="flex justify-start mb-6 animate-pulse">
@@ -322,24 +375,24 @@ const App: React.FC = () => {
                 <div className="w-16 h-16 bg-white/10 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-white/20">
                   <i className="fa-solid fa-crown text-3xl text-emerald-400"></i>
                 </div>
-                <h4 className="text-xl font-black uppercase tracking-tight">Free Weekly Limit Reached</h4>
+                <h4 className="text-xl font-black uppercase tracking-tight">Intelligence Payload Depleted</h4>
                 <p className="text-emerald-100 text-xs leading-relaxed max-sm mx-auto">
-                  You've used all 10 searches for this week. Upgrade to **Enterprise Pro** for unlimited search, OCR document vault access, and automated audit reports.
+                  You've consumed your {user.tokenLimit.toLocaleString()} token allocation. Upgrade to a **Professional** or **Enterprise** pack for high-volume audit analysis.
                 </p>
                 <button 
-                  onClick={() => setActiveModal('settings')}
+                  onClick={() => handleShowModal('settings', 'billing')}
                   className="w-full py-4 bg-white text-emerald-900 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl hover:bg-emerald-50 transition-all active:scale-95"
                 >
-                  Activate Enterprise Pro Plan
+                  Upgrade Intelligence Pack
                 </button>
               </div>
             )}
           </div>
         </main>
 
-        <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 p-4">
-          <div className="max-w-2xl mx-auto">
-            <div className="flex gap-2">
+        <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 p-4 md:p-6 shrink-0 no-print">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex gap-4">
               <input
                 type="text"
                 value={input}
@@ -347,41 +400,39 @@ const App: React.FC = () => {
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 disabled={isLimitReached}
                 placeholder={isLimitReached ? "Upgrade to continue searching..." : `Type a message or use '/restart'...`}
-                className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-sm disabled:opacity-50"
+                className="flex-1 px-6 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-base disabled:opacity-50"
               />
               <button
                 onClick={() => handleSend()}
                 disabled={status === AppStatus.LOADING || !input.trim() || isLimitReached}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white w-12 h-12 flex items-center justify-center rounded-xl shadow-md transition-all disabled:grayscale disabled:opacity-50"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white w-14 h-14 flex items-center justify-center rounded-2xl shadow-xl transition-all disabled:grayscale disabled:opacity-50"
               >
-                <i className="fa-solid fa-paper-plane"></i>
+                <i className="fa-solid fa-paper-plane text-lg"></i>
               </button>
             </div>
             
-            <div className="mt-3 flex items-center justify-between px-2">
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4 px-2">
               <div className="flex items-center gap-2">
-                 <p className="text-[9px] text-slate-400 font-medium">
+                 <p className="text-[10px] text-slate-400 font-medium">
                   {DISCLAIMER}
                 </p>
               </div>
               
-              <div className="flex items-center gap-2">
-                <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+              <div className="flex items-center gap-6">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                   Mode: <span className="text-emerald-600">{activeMode}</span>
                 </div>
-                {user.tier === 'Free' && (
-                  <div className="flex items-center gap-2 ml-4">
-                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                      Usage: <span className={isLimitReached ? 'text-rose-500' : 'text-emerald-600'}>{searchStats.count}/{FREE_LIMIT}</span>
-                    </div>
-                    <div className="w-16 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-500 ${isLimitReached ? 'bg-rose-500' : 'bg-emerald-500'}`} 
-                        style={{ width: `${(searchStats.count / FREE_LIMIT) * 100}%` }}
-                      />
-                    </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Tokens: <span className={isLimitReached ? 'text-rose-500' : 'text-emerald-600'}>{tokenStats.used.toLocaleString()} / {user.tokenLimit.toLocaleString()}</span>
                   </div>
-                )}
+                  <div className="w-24 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-500 ${isLimitReached ? 'bg-rose-500' : 'bg-emerald-500'}`} 
+                      style={{ width: `${Math.min((tokenStats.used / user.tokenLimit) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -394,10 +445,10 @@ const App: React.FC = () => {
           <ChecklistGenerator activeStandard={activeStandard} language={language} user={user} onClose={() => setActiveModal(null)} />
         )}
         {activeModal === 'nc-drafter' && (
-          <NCResponseDrafter onDraft={(f) => handleSend(f, true)} onClose={() => setActiveModal(null)} />
+          <NCResponseDrafter standard={activeStandard} language={language} policies={policies} user={user} onClose={() => setActiveModal(null)} />
         )}
         {activeModal === 'settings' && (
-          <SettingsModal user={user} onUpdateUser={(u) => { setUser(u); localStorage.setItem('rspo_user', JSON.stringify(u)); }} onLogout={handleLogout} onClose={() => setActiveModal(null)} />
+          <SettingsModal user={user} onUpdateUser={handleUpdateUser} onLogout={handleLogout} onClose={() => setActiveModal(null)} initialTab={settingsTab} />
         )}
         <HistoryDrawer 
           isOpen={activeModal === 'history'} 

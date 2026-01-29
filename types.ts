@@ -8,16 +8,48 @@ export interface Standard {
 
 export type Language = 'en' | 'id' | 'tp';
 
+export type SettingsTab = 'profile' | 'billing' | 'preferences' | 'notifications' | 'api';
+
+export type UserTier = 'Free' | 'Starter' | 'Professional' | 'Enterprise';
+
+export interface UserPreferences {
+  theme: 'light' | 'dark';
+  language: Language;
+  autoSave: boolean;
+}
+
+export interface UserNotifications {
+  billing: boolean;
+  compliance: boolean;
+  system: boolean;
+}
+
+export interface Invoice {
+  id: string;
+  date: string;
+  amount: string;
+  status: string;
+  billingPeriod: string;
+  tokens: number;
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
+  phone?: string;
+  address?: string;
   avatar?: string;
   organization?: string;
-  role: 'auditor' | 'manager' | 'smallholder' | 'demo';
-  tier?: 'Free' | 'Enterprise Pro';
+  role: string;
+  tier: UserTier;
+  tokenLimit: number;
+  tokensUsed: number;
   subscriptionStatus?: 'Active' | 'Expired' | 'Pending';
-  stripeKey?: string; // For linking the user's specific Stripe account
+  stripeKey?: string;
+  preferences: UserPreferences;
+  notifications: UserNotifications;
+  invoices: Invoice[];
 }
 
 export interface MessageOption {
@@ -72,13 +104,26 @@ export interface SavedAudit {
   completion: number;
 }
 
+export interface NCDraftRecord {
+  id: string;
+  originalFinding: string;
+  standardShortName: string;
+  observation: string;
+  requirement: string;
+  rootCause: string;
+  correctiveAction: string;
+  preventionPlan: string;
+  timestamp: number;
+  status: 'Draft' | 'Finalized';
+}
+
 export interface PolicyDocument {
   id: string;
   name: string;
   type: 'SOP' | 'Policy' | 'Report';
   content: string;
   uploadDate: Date;
-  filePreview?: string; // Base64 data URL for images or PDF thumbnails
+  filePreview?: string;
 }
 
 export enum AppStatus {

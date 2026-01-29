@@ -29,11 +29,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onOptionClick })
     return content.split('\n').map((line, i) => {
       const trimmedLine = line.trim();
       
-      // Handle Headings
-      if (trimmedLine.startsWith('###')) {
+      // Handle Headings (Catching any #, ##, ### etc and stripping them)
+      const headerMatch = trimmedLine.match(/^(#{1,6})\s*(.*)$/);
+      if (headerMatch) {
+        const headerText = headerMatch[2].trim();
         return (
-          <h3 key={i} className="text-emerald-700 dark:text-emerald-400 font-bold text-base mt-4 mb-2 first:mt-0">
-            {parseInlineMarkdown(trimmedLine.replace('###', '').trim())}
+          <h3 key={i} className="text-emerald-700 dark:text-emerald-400 font-black text-sm uppercase tracking-wider mt-4 mb-2 first:mt-0 flex items-center gap-2">
+            <span className="w-1 h-3 bg-emerald-500 rounded-full"></span>
+            {parseInlineMarkdown(headerText)}
           </h3>
         );
       }

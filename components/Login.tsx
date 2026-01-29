@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, ModalType } from '../types';
+import { PLANS } from '../constants';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -14,14 +15,22 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowModal }) => {
   const handleDemoLogin = () => {
     if (!acceptedTerms) return alert("Please accept the Terms of Service to continue.");
     setIsLoading(true);
+    const freePlan = PLANS.find(p => p.tier === 'Free')!;
     setTimeout(() => {
       onLogin({
         id: 'demo-123',
         name: 'Demo Auditor',
         email: 'auditor@demo.rspo.org',
-        role: 'demo',
+        phone: '+60 3-2302 1500',
+        address: 'Level 13A, Menara UAC, No. 12, Jalan PJU 7/5, Mutiara Damansara, 47810 Petaling Jaya, Selangor, Malaysia',
+        role: 'Auditor',
         tier: 'Free',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix'
+        tokenLimit: freePlan.tokens,
+        tokensUsed: 0,
+        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
+        preferences: { theme: 'light', language: 'en', autoSave: true },
+        notifications: { billing: true, compliance: true, system: true },
+        invoices: []
       });
       setIsLoading(false);
     }, 1000);
@@ -30,14 +39,23 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowModal }) => {
   const handleGoogleLogin = () => {
     if (!acceptedTerms) return alert("Please accept the Terms of Service to continue.");
     setIsLoading(true);
+    // Modified to default to Free access per project requirements
+    const freePlan = PLANS.find(p => p.tier === 'Free')!;
     setTimeout(() => {
       onLogin({
         id: 'google-999',
         name: 'John Doe',
         email: 'john.doe@gmail.com',
-        role: 'manager',
-        tier: 'Enterprise Pro',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John'
+        phone: '+62 21 2345 6789',
+        address: 'Jl. Jend. Sudirman No.1, Jakarta, Indonesia',
+        role: 'Compliance Manager',
+        tier: 'Free',
+        tokenLimit: freePlan.tokens,
+        tokensUsed: 0,
+        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John',
+        preferences: { theme: 'light', language: 'en', autoSave: true },
+        notifications: { billing: true, compliance: true, system: true },
+        invoices: []
       });
       setIsLoading(false);
     }, 1500);
@@ -100,7 +118,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowModal }) => {
           </div>
 
           <p className="mt-10 text-center text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed uppercase font-bold tracking-tighter">
-            Audit-grade security for RSPO certification processes
+            Default signup grants Free access (5,000 weekly tokens)
           </p>
         </div>
       </div>

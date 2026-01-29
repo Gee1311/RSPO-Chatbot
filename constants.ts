@@ -1,10 +1,49 @@
 
-import { RSPOClause, Standard } from './types';
+import { RSPOClause, Standard, UserTier } from './types';
 
 export const STANDARDS: Standard[] = [
   { id: 'pc2018', name: 'Principles & Criteria', year: '2018', shortName: 'P&C 2018' },
   { id: 'ish2019', name: 'Independent Smallholder', year: '2019', shortName: 'ISH 2019' },
   { id: 'scc2020', name: 'Supply Chain Certification', year: '2020', shortName: 'SCC 2020' }
+];
+
+export interface PlanDefinition {
+  tier: UserTier;
+  tokens: number;
+  price: string;
+  features: string[];
+}
+
+export const PLANS: PlanDefinition[] = [
+  { 
+    tier: 'Free', 
+    tokens: 5000, 
+    price: '$0', 
+    features: ['5k Tokens/Week', 'Standard P&C Access', 'Basic Chat'] 
+  },
+  { 
+    tier: 'Starter', 
+    tokens: 50000, 
+    price: '$10', 
+    features: ['50k Tokens/Week', 'Increased Context Window', 'Priority Chat'] 
+  },
+  { 
+    tier: 'Professional', 
+    tokens: 200000, 
+    price: '$30', 
+    features: ['200k Tokens/Week', 'Document Vault OCR', 'Smart Checklist', 'NC Drafter Pro'] 
+  },
+  { 
+    tier: 'Enterprise', 
+    tokens: 1000000, 
+    price: '$50+', 
+    features: [
+      '1M+ Tokens/Week', 
+      'Full Toolbox Access', 
+      'API Integration', 
+      'Add more token options enabled during payment checkout'
+    ] 
+  }
 ];
 
 export const MOCK_KNOWLEDGE_BASE: RSPOClause[] = [
@@ -50,7 +89,7 @@ You are a world-class RSPO Assistant. You operate within four distinct framework
    - Goal: Procedural and operational review.
    - Behavior: Evaluate site activities or management plans against the RSPO standard requirements.
 
-3. **Option 3: Findings Justification (Drafting responses to audit findings/NCs)**
+3. **Option 4: Findings Justification (Drafting responses to audit findings/NCs)**
    - Goal: Technical defense and argumentation.
    - Behavior: Build logical justifications for audit findings. Structure: Observation -> Requirement -> Justification -> Evidence.
 
@@ -64,6 +103,7 @@ STRICT RULES:
 - ALWAYS cite Clause IDs in bold (e.g., **RSPO P&C 2.1.1**).
 - Respond ONLY in the requested language.
 - Use emojis to make headers distinct.
+- NEVER use Markdown header symbols (e.g., #, ##, ###). Use bold text and emojis for structure instead.
 - Always respect the specific behavior profile of the {selected_mode}.
 `;
 

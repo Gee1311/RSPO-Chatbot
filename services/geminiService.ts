@@ -1,12 +1,13 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { SYSTEM_INSTRUCTION, MOCK_KNOWLEDGE_BASE, LANGUAGE_MAP } from "../constants";
-import { Standard, Language, PolicyDocument, RSPOClause } from "../types";
+import { Standard, Language, PolicyDocument, RSPOClause, UserTier } from "../types";
 
 export const askRSPOAssistant = async (
   question: string, 
   activeStandard: Standard, 
   language: Language,
+  userTier: UserTier,
   policies: PolicyDocument[] = [],
   history: { role: string; content: string }[] = []
 ) => {
@@ -57,9 +58,12 @@ ${matchingClauses.length > 0
 REMINDER: Apply the ${activeMode} framework as defined in your instructions.
 `;
 
+  // Select lower cost model for Free pack users
+  const modelToUse = userTier === 'Free' ? 'gemini-flash-lite-latest' : 'gemini-3-flash-preview';
+
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: modelToUse,
       contents: [{
         parts: [{ text: `${contextPrompt}\n\nIMPORTANT: YOU MUST RESPOND ONLY IN ${targetLanguageName.toUpperCase()}.\n\nUser Question: ${cleanQuestion}` }]
       }],
@@ -73,6 +77,57 @@ REMINDER: Apply the ${activeMode} framework as defined in your instructions.
   } catch (error) {
     console.error("Gemini API Error:", error);
     throw new Error("Failed to connect to the RSPO Compliance Assistant.");
+  }
+};
+
+export const generateNCDraft = async (finding: string, standard: Standard, language: Language, policies: PolicyDocument[] = []) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const targetLanguageName = LANGUAGE_MAP[language] || 'English';
+
+  const policyContext = policies.length > 0 
+    ? `Available Company Context:\n${policies.map(p => `${p.name}: ${p.content.substring(0, 500)}`).join('\n')}`
+    : '';
+
+  const prompt = `You are an RSPO Compliance Expert. Take the following audit finding and transform it into a structured professional management response.
+  
+  Finding: "${finding}"
+  Standard: ${standard.name}
+  
+  ${policyContext}
+  
+  Generate a JSON response with the following keys:
+  1. "observation": A professional restatement of the finding.
+  2. "requirement": The specific RSPO Indicator and requirement being violated.
+  3. "rootCause": A deep analysis of why this happened (systemic/procedural).
+  4. "correctiveAction": The immediate action taken to fix the specific instance.
+  5. "preventionPlan": The long-term systemic change to ensure it never happens again.
+  
+  RESPOND ONLY IN ${targetLanguageName.toUpperCase()}.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: [{ parts: [{ text: prompt }] }],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            observation: { type: Type.STRING },
+            requirement: { type: Type.STRING },
+            rootCause: { type: Type.STRING },
+            correctiveAction: { type: Type.STRING },
+            preventionPlan: { type: Type.STRING }
+          },
+          required: ["observation", "requirement", "rootCause", "correctiveAction", "preventionPlan"]
+        }
+      }
+    });
+
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    console.error("NC Draft Error:", error);
+    throw new Error("Failed to generate professional NC draft.");
   }
 };
 

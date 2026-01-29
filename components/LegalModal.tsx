@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ModalType } from '../types';
 
@@ -83,20 +84,30 @@ const LegalModal: React.FC<LegalModalProps> = ({ type, onClose }) => {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Issue Type</label>
-                  <select className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100">
-                    <option>Technical Bug</option>
-                    <option>Standard Interpretation Error</option>
-                    <option>Missing Clause</option>
-                    <option>Feedback / Suggestion</option>
-                  </select>
+                  <div className="relative">
+                    <select className="w-full appearance-none bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 pr-8 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100 cursor-pointer">
+                      <option>Technical Bug</option>
+                      <option>Standard Interpretation Error</option>
+                      <option>Missing Clause</option>
+                      <option>Feedback / Suggestion</option>
+                    </select>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <i className="fa-solid fa-chevron-down text-[10px]"></i>
+                    </div>
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Urgency</label>
-                  <select className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100">
-                    <option>Low</option>
-                    <option>Medium (Active Audit)</option>
-                    <option>High (Critical)</option>
-                  </select>
+                  <div className="relative">
+                    <select className="w-full appearance-none bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 pr-8 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100 cursor-pointer">
+                      <option>Low</option>
+                      <option>Medium (Active Audit)</option>
+                      <option>High (Critical)</option>
+                    </select>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <i className="fa-solid fa-chevron-down text-[10px]"></i>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div className="space-y-1">
