@@ -5,9 +5,10 @@ import { Message, MessageOption } from '../types';
 interface MessageBubbleProps {
   message: Message;
   onOptionClick?: (option: MessageOption) => void;
+  onOpenNCDrafter?: () => void;
 }
 
-const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onOptionClick }) => {
+const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onOptionClick, onOpenNCDrafter }) => {
   const isAssistant = message.role === 'assistant';
 
   const parseInlineMarkdown = (text: string) => {
@@ -145,6 +146,23 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onOptionClick })
           {isAssistant ? (
             <div className="assistant-content prose prose-sm dark:prose-invert max-w-none">
               {formatContent(message.content)}
+              
+              {message.showNCDraftLink && (
+                <div className="mt-6 p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 rounded-2xl animate-in slide-in-from-bottom-2 duration-500">
+                  <p className="text-[11px] font-bold text-amber-800 dark:text-amber-200 mb-3 uppercase tracking-widest flex items-center gap-2">
+                    <i className="fa-solid fa-wand-magic-sparkles"></i> 
+                    Response Tooling Available
+                  </p>
+                  <button 
+                    onClick={onOpenNCDrafter}
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-black uppercase tracking-widest py-3 rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    Generate Professional NC Draft
+                    <i className="fa-solid fa-arrow-right text-[10px]"></i>
+                  </button>
+                  <p className="mt-2 text-[9px] text-amber-600/60 text-center font-bold">PRO/ENTERPRISE FEATURE</p>
+                </div>
+              )}
             </div>
           ) : (
             <p className="leading-relaxed">{message.content}</p>

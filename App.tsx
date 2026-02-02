@@ -243,7 +243,9 @@ const App: React.FC = () => {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: response,
-        timestamp: new Date()
+        timestamp: new Date(),
+        // Only show NC Drafter link if the mode was Findings Justification
+        showNCDraftLink: activeMode === 'ARGUMENTATIVE'
       };
       
       setMessages(prev => [...prev, assistantMsg]);
@@ -360,7 +362,14 @@ const App: React.FC = () => {
 
         <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50/50 dark:bg-slate-950/40 relative scrollbar-hide">
           <div className="max-w-6xl mx-auto">
-            {messages.map(msg => <MessageBubble key={msg.id} message={msg} onOptionClick={handleOptionClick} />)}
+            {messages.map(msg => (
+              <MessageBubble 
+                key={msg.id} 
+                message={msg} 
+                onOptionClick={handleOptionClick} 
+                onOpenNCDrafter={() => handleShowModal('nc-drafter')}
+              />
+            ))}
             {status === AppStatus.LOADING && (
               <div className="flex justify-start mb-6 animate-pulse">
                 <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-[11px] font-bold text-slate-400">

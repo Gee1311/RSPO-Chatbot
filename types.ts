@@ -64,6 +64,7 @@ export interface Message {
   content: string;
   timestamp: Date;
   isNCDraft?: boolean;
+  showNCDraftLink?: boolean;
   options?: MessageOption[];
 }
 
