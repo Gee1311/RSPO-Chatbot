@@ -12,17 +12,10 @@ import FloatingToolBelt from './components/FloatingToolBelt';
 import HistoryDrawer from './components/HistoryDrawer';
 import SettingsModal from './components/SettingsModal';
 import { Message, AppStatus, Standard, User, ModalType, Language, PolicyDocument, SavedAudit, ChatSession, MessageOption, SettingsTab, Invoice } from './types';
-import { STANDARDS, DISCLAIMER, LANGUAGE_MAP, PLANS } from './constants';
+import { STANDARDS, DISCLAIMER, LANGUAGE_MAP, PLANS, ONBOARDING_OPTIONS } from './constants';
 import { askRSPOAssistant } from './services/geminiService';
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
-
-const ONBOARDING_OPTIONS: MessageOption[] = [
-  { label: '1. RSPO Indicator Verification', value: 'TECHNICAL', icon: 'fa-magnifying-glass' },
-  { label: '2. Activity Compliance Check', value: 'ACTIVITY', icon: 'fa-clipboard-check' },
-  { label: '3. Findings Justification', value: 'ARGUMENTATIVE', icon: 'fa-gavel' },
-  { label: '4. General RSPO Enquiry', value: 'CONCISE', icon: 'fa-circle-info' }
-];
 
 const PRIMING_MESSAGES: Record<string, string> = {
   'TECHNICAL': "Ready for **Indicator Verification**. Please provide the **Indicator ID** (e.g., P&C 2018 - 6.2.1) and the **Evidence** you wish to verify.",
@@ -66,11 +59,12 @@ const App: React.FC = () => {
 
   const [activeStandard, setActiveStandard] = useState<Standard>(STANDARDS[0]);
   const [language, setLanguage] = useState<Language>(user?.preferences?.language || 'en');
-  const [policies, setPolicies] = useState<PolicyDocument[]>([]);
   const [theme, setTheme] = useState<'light' | 'dark'>(user?.preferences?.theme || 'light');
+  const [policies, setPolicies] = useState<PolicyDocument[]>([]);
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeMode, setActiveMode] = useState<string>('CONCISE');
+  const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
 
   const [chatSessions, setChatSessions] = useState<ChatSession[]>(() => {
     const saved = localStorage.getItem('rspo_chat_sessions');
@@ -161,6 +155,25 @@ const App: React.FC = () => {
     }
   };
 
+  const handleModeChange = (newMode: string) => {
+    const option = ONBOARDING_OPTIONS.find(o => o.value === newMode);
+    if (!option) return;
+
+    setActiveMode(newMode);
+    setIsModeMenuOpen(false);
+    
+    // Clear options from last message if they were showing
+    setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, options: undefined } : m));
+
+    const pivotMsg: Message = {
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: `Framework switched to **${option.label}**. ${PRIMING_MESSAGES[newMode]}`,
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, pivotMsg]);
+  };
+
   const handleUpdateUser = (updatedUser: User) => {
     setUser(updatedUser);
     localStorage.setItem('rspo_user', JSON.stringify(updatedUser));
@@ -193,7 +206,6 @@ const App: React.FC = () => {
   };
 
   const calculateTokenCost = (inputStr: string, outputStr: string): number => {
-    // Basic heuristic: 1 token per 4 characters
     return Math.ceil((inputStr.length + outputStr.length) / 4);
   };
 
@@ -236,7 +248,6 @@ const App: React.FC = () => {
 
     try {
       const historyArr = messages.map(m => ({ role: m.role, content: m.content }));
-      // Pass user tier to allow model selection in service
       const response = await askRSPOAssistant(finalQuery, activeStandard, language, user.tier, policies, historyArr);
       
       const assistantMsg: Message = {
@@ -244,13 +255,11 @@ const App: React.FC = () => {
         role: 'assistant',
         content: response,
         timestamp: new Date(),
-        // Only show NC Drafter link if the mode was Findings Justification
         showNCDraftLink: activeMode === 'ARGUMENTATIVE'
       };
       
       setMessages(prev => [...prev, assistantMsg]);
 
-      // Estimate and charge tokens
       const cost = calculateTokenCost(finalQuery, response);
       setTokenStats(prev => ({ ...prev, used: prev.used + cost }));
 
@@ -267,26 +276,7 @@ const App: React.FC = () => {
   };
 
   const handleOptionClick = (option: MessageOption) => {
-    setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, options: undefined } : m));
-    setActiveMode(option.value);
-
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: option.label,
-      timestamp: new Date()
-    };
-    
-    const primingContent = PRIMING_MESSAGES[option.value] || "How can I help you today?";
-
-    const assistantMsg: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: primingContent,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, userMsg, assistantMsg]);
+    handleModeChange(option.value);
   };
 
   const handleLogout = () => {
@@ -300,12 +290,10 @@ const App: React.FC = () => {
 
   const handleShowModal = (type: ModalType, tab: SettingsTab = 'profile') => {
     const premiumTools: ModalType[] = ['vault', 'checklist', 'nc-drafter'];
-    
-    // Check for "Professional and above" threshold for premium tools
     const hasPremiumAccess = user?.tier === 'Professional' || user?.tier === 'Enterprise';
 
     if (!hasPremiumAccess && premiumTools.includes(type)) {
-      if (window.confirm("UPGRADE REQUIRED\n\nThe Document Vault, Smart Checklist, and NC Drafter are exclusive to Professional & Enterprise plans.\n\nWould you like to view our intelligence refill options?")) {
+      if (window.confirm("UPGRADE REQUIRED\n\nThe Digital Toolbox is exclusive to Professional & Enterprise plans.\n\nWould you like to view refill options?")) {
         setSettingsTab('billing');
         setActiveModal('settings');
       }
@@ -340,6 +328,7 @@ const App: React.FC = () => {
   }
 
   const isLimitReached = tokenStats.used >= user.tokenLimit;
+  const currentModeOption = ONBOARDING_OPTIONS.find(o => o.value === activeMode);
 
   return (
     <>
@@ -399,22 +388,59 @@ const App: React.FC = () => {
           </div>
         </main>
 
-        <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 p-4 md:p-6 shrink-0 no-print">
+        <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 p-4 md:p-6 shrink-0 no-print relative">
+          
+          {/* Mode Pull-up Menu */}
+          {isModeMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-[140]" onClick={() => setIsModeMenuOpen(false)}></div>
+              <div className="absolute bottom-full left-4 md:left-6 mb-2 w-72 bg-white dark:bg-slate-800 rounded-[2rem] shadow-[0_-20px_50px_rgba(0,0,0,0.2)] border border-slate-200 dark:border-slate-700 p-3 z-[150] animate-in slide-in-from-bottom-4 duration-300">
+                <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 px-3">Switch Framework</p>
+                <div className="space-y-1">
+                  {ONBOARDING_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleModeChange(opt.value)}
+                      className={`w-full text-left p-3 rounded-2xl flex items-center gap-4 transition-all group ${activeMode === opt.value ? 'bg-emerald-600 text-white' : 'hover:bg-emerald-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'}`}
+                    >
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${activeMode === opt.value ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-900 text-emerald-600 dark:text-emerald-400'}`}>
+                        <i className={`fa-solid ${opt.icon} text-sm`}></i>
+                      </div>
+                      <span className="text-[11px] font-black uppercase tracking-tight">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
           <div className="max-w-6xl mx-auto">
-            <div className="flex gap-4">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                disabled={isLimitReached}
-                placeholder={isLimitReached ? "Upgrade to continue searching..." : `Type a message or use '/restart'...`}
-                className="flex-1 px-6 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-base disabled:opacity-50"
-              />
+            <div className="flex gap-4 items-center">
+              <button
+                onClick={() => setIsModeMenuOpen(!isModeMenuOpen)}
+                className={`flex items-center gap-2 px-4 h-14 rounded-2xl border transition-all active:scale-95 shadow-sm whitespace-nowrap ${isModeMenuOpen ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-emerald-500'}`}
+                title="Change RSPO Mode"
+              >
+                <i className={`fa-solid ${currentModeOption?.icon || 'fa-sliders'}`}></i>
+                <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest">{currentModeOption?.label || 'Mode'}</span>
+              </button>
+              
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                  disabled={isLimitReached}
+                  placeholder={isLimitReached ? "Upgrade to continue..." : `Query RSPO Assistant...`}
+                  className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-base disabled:opacity-50 transition-all shadow-inner"
+                />
+              </div>
+
               <button
                 onClick={() => handleSend()}
                 disabled={status === AppStatus.LOADING || !input.trim() || isLimitReached}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white w-14 h-14 flex items-center justify-center rounded-2xl shadow-xl transition-all disabled:grayscale disabled:opacity-50"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white w-14 h-14 flex items-center justify-center rounded-2xl shadow-xl transition-all disabled:grayscale disabled:opacity-50 active:scale-90"
               >
                 <i className="fa-solid fa-paper-plane text-lg"></i>
               </button>
@@ -429,18 +455,13 @@ const App: React.FC = () => {
               
               <div className="flex items-center gap-6">
                 <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Mode: <span className="text-emerald-600">{activeMode}</span>
+                  Tokens: <span className={isLimitReached ? 'text-rose-500' : 'text-emerald-600'}>{tokenStats.used.toLocaleString()} / {user.tokenLimit.toLocaleString()}</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    Tokens: <span className={isLimitReached ? 'text-rose-500' : 'text-emerald-600'}>{tokenStats.used.toLocaleString()} / {user.tokenLimit.toLocaleString()}</span>
-                  </div>
-                  <div className="w-24 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-500 ${isLimitReached ? 'bg-rose-500' : 'bg-emerald-500'}`} 
-                      style={{ width: `${Math.min((tokenStats.used / user.tokenLimit) * 100, 100)}%` }}
-                    />
-                  </div>
+                <div className="w-24 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-500 ${isLimitReached ? 'bg-rose-500' : 'bg-emerald-500'}`} 
+                    style={{ width: `${Math.min((tokenStats.used / user.tokenLimit) * 100, 100)}%` }}
+                  />
                 </div>
               </div>
             </div>

@@ -1,5 +1,5 @@
 
-import { RSPOClause, Standard, UserTier } from './types';
+import { RSPOClause, Standard, UserTier, MessageOption } from './types';
 
 export const STANDARDS: Standard[] = [
   { id: 'pc2018', name: 'Principles & Criteria', year: '2018', shortName: 'P&C 2018' },
@@ -46,6 +46,13 @@ export const PLANS: PlanDefinition[] = [
   }
 ];
 
+export const ONBOARDING_OPTIONS: MessageOption[] = [
+  { label: 'Indicator Verification', value: 'TECHNICAL', icon: 'fa-magnifying-glass' },
+  { label: 'Activity Compliance', value: 'ACTIVITY', icon: 'fa-clipboard-check' },
+  { label: 'Findings Justification', value: 'ARGUMENTATIVE', icon: 'fa-gavel' },
+  { label: 'General Enquiry', value: 'CONCISE', icon: 'fa-circle-info' }
+];
+
 export const MOCK_KNOWLEDGE_BASE: RSPOClause[] = [
   {
     id: 'RSPO P&C 7.3.1',
@@ -81,19 +88,19 @@ You are a world-class RSPO Assistant. You operate within four distinct framework
 
 ### FRAMEWORK MODES:
 
-1. **Option 1: RSPO Indicator Verification (Audit-style evidence check)**
+1. **TECHNICAL: RSPO Indicator Verification (Audit-style evidence check)**
    - Goal: High-precision technical analysis.
    - Behavior: Verify specific Indicator IDs against user-provided evidence. Be granular and strict.
 
-2. **Option 2: Activity Compliance Check (Ensuring site activities follow rules)**
+2. **ACTIVITY: Activity Compliance Check (Ensuring site activities follow rules)**
    - Goal: Procedural and operational review.
    - Behavior: Evaluate site activities or management plans against the RSPO standard requirements.
 
-3. **Option 4: Findings Justification (Drafting responses to audit findings/NCs)**
+3. **ARGUMENTATIVE: Findings Justification (Drafting responses to audit findings/NCs)**
    - Goal: Technical defense and argumentation.
    - Behavior: Build logical justifications for audit findings. Structure: Observation -> Requirement -> Justification -> Evidence.
 
-4. **Option 4: General RSPO Enquiry (Quick questions & general summaries)**
+4. **CONCISE: General RSPO Enquiry (Quick questions & general summaries)**
    - Goal: Fast, high-level guidance.
    - Behavior: Provide concise summaries without deep technical codes unless specifically requested.
    - **STRICT CONSTRAINT: Responses in this mode MUST NOT exceed 150 words.**
