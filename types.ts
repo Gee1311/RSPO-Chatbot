@@ -6,7 +6,7 @@ export interface Standard {
   shortName: string;
 }
 
-export type Language = 'en' | 'id' | 'tp';
+export type Language = 'en' | 'id';
 
 export type SettingsTab = 'profile' | 'billing' | 'preferences' | 'notifications' | 'api';
 
@@ -31,6 +31,7 @@ export interface Invoice {
   status: string;
   billingPeriod: string;
   tokens: number;
+  paymentMethod?: string;
 }
 
 export interface User {
@@ -45,17 +46,24 @@ export interface User {
   tier: UserTier;
   tokenLimit: number;
   tokensUsed: number;
+  createdAt: number;
   subscriptionStatus?: 'Active' | 'Expired' | 'Pending';
   stripeKey?: string;
   preferences: UserPreferences;
   notifications: UserNotifications;
   invoices: Invoice[];
+  nationalInterpretations: string[];
 }
 
 export interface MessageOption {
   label: string;
   value: string;
   icon: string;
+}
+
+export interface GroundingUrl {
+  title: string;
+  uri: string;
 }
 
 export interface Message {
@@ -66,6 +74,7 @@ export interface Message {
   isNCDraft?: boolean;
   showNCDraftLink?: boolean;
   options?: MessageOption[];
+  groundingUrls?: GroundingUrl[];
 }
 
 export interface ChatSession {
@@ -134,4 +143,4 @@ export enum AppStatus {
   AUTHENTICATING = 'authenticating'
 }
 
-export type ModalType = 'privacy' | 'terms' | 'contact' | 'vault' | 'nc-drafter' | 'checklist' | 'history' | 'settings' | null;
+export type ModalType = 'privacy' | 'terms' | 'contact' | 'vault' | 'nc-drafter' | 'checklist' | 'history' | 'settings' | 'payment' | null;

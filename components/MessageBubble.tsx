@@ -12,7 +12,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onOptionClick, o
   const isAssistant = message.role === 'assistant';
 
   const parseInlineMarkdown = (text: string) => {
-    // Regex to find **bold**, __bold__, *italic*, _italic_
     const parts = text.split(/(\*\*.*?\*\*|__.*?__|\*.*?\*|_.*?_)/g);
     
     return parts.map((part, i) => {
@@ -30,7 +29,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onOptionClick, o
     return content.split('\n').map((line, i) => {
       const trimmedLine = line.trim();
       
-      // Handle Headings (Catching any #, ##, ### etc and stripping them)
       const headerMatch = trimmedLine.match(/^(#{1,6})\s*(.*)$/);
       if (headerMatch) {
         const headerText = headerMatch[2].trim();
@@ -42,7 +40,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onOptionClick, o
         );
       }
       
-      // Handle Bullet Points (both - and *)
       if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
         return (
           <li key={i} className="ml-4 list-disc mb-1 text-slate-700 dark:text-slate-300">
@@ -51,7 +48,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onOptionClick, o
         );
       }
       
-      // Handle Numbered Lists
       if (trimmedLine.match(/^\d+\./)) {
         return (
           <li key={i} className="ml-4 list-decimal mb-1 text-slate-700 dark:text-slate-300">
@@ -60,12 +56,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onOptionClick, o
         );
       }
 
-      // Handle empty lines (spacing)
       if (trimmedLine === '' || trimmedLine === '--') {
         return <div key={i} className="h-2" />;
       }
       
-      // Default Paragraph
       return (
         <p key={i} className="mb-2 last:mb-0 leading-relaxed text-slate-700 dark:text-slate-300">
           {parseInlineMarkdown(line)}
@@ -147,6 +141,28 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onOptionClick, o
             <div className="assistant-content prose prose-sm dark:prose-invert max-w-none">
               {formatContent(message.content)}
               
+              {message.groundingUrls && message.groundingUrls.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                  <p className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest mb-2 flex items-center gap-2">
+                    <i className="fa-solid fa-link"></i> Verified RSPO Resources
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {message.groundingUrls.map((link, idx) => (
+                      <a 
+                        key={idx}
+                        href={link.uri}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[9px] font-bold text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 bg-slate-50 dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-2 transition-colors"
+                      >
+                        <i className="fa-solid fa-globe text-[8px]"></i>
+                        {link.title.length > 30 ? link.title.substring(0, 30) + '...' : link.title}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {message.showNCDraftLink && (
                 <div className="mt-6 p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 rounded-2xl animate-in slide-in-from-bottom-2 duration-500">
                   <p className="text-[11px] font-bold text-amber-800 dark:text-amber-200 mb-3 uppercase tracking-widest flex items-center gap-2">

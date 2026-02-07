@@ -11,11 +11,13 @@ import ChecklistGenerator from './components/ChecklistGenerator';
 import FloatingToolBelt from './components/FloatingToolBelt';
 import HistoryDrawer from './components/HistoryDrawer';
 import SettingsModal from './components/SettingsModal';
-import { Message, AppStatus, Standard, User, ModalType, Language, PolicyDocument, SavedAudit, ChatSession, MessageOption, SettingsTab, Invoice } from './types';
+import PaymentGateway from './components/PaymentGateway';
+import { Message, AppStatus, Standard, User, ModalType, Language, PolicyDocument, SavedAudit, ChatSession, MessageOption, SettingsTab, Invoice, UserTier } from './types';
 import { STANDARDS, DISCLAIMER, LANGUAGE_MAP, PLANS, ONBOARDING_OPTIONS } from './constants';
-import { askRSPOAssistant } from './services/geminiService';
+import { askRSPOAssistant, extractTextFromImage } from './services/geminiService';
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
+const MONTH_IN_MS = 30 * 24 * 60 * 60 * 1000;
 
 const PRIMING_MESSAGES: Record<string, string> = {
   'TECHNICAL': "Ready for **Indicator Verification**. Please provide the **Indicator ID** (e.g., P&C 2018 - 6.2.1) and the **Evidence** you wish to verify.",
@@ -27,22 +29,28 @@ const PRIMING_MESSAGES: Record<string, string> = {
 const DEFAULT_USER_PREFS = {
   preferences: { theme: 'light' as const, language: 'en' as const, autoSave: true },
   notifications: { billing: true, compliance: true, system: true },
-  invoices: []
+  invoices: [],
+  nationalInterpretations: []
 };
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('rspo_user');
     if (!saved) return null;
-    const parsed = JSON.parse(saved);
-    const freeLimit = PLANS.find(p => p.tier === 'Free')?.tokens || 5000;
-    return { 
-      ...DEFAULT_USER_PREFS, 
-      tokensUsed: 0, 
-      tokenLimit: freeLimit, 
-      tier: 'Free',
-      ...parsed 
-    };
+    try {
+      const parsed = JSON.parse(saved);
+      const freePlan = PLANS.find(p => p.tier === 'Free')!;
+      return { 
+        ...DEFAULT_USER_PREFS, 
+        tokensUsed: 0, 
+        tokenLimit: freePlan.tokens, 
+        tier: 'Free',
+        createdAt: Date.now(),
+        ...parsed 
+      };
+    } catch (e) {
+      return null;
+    }
   });
   
   const [tokenStats, setTokenStats] = useState(() => {
@@ -88,6 +96,30 @@ const App: React.FC = () => {
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('profile');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mainInputRef = useRef<HTMLInputElement>(null);
+  const [timeToRecharge, setTimeToRecharge] = useState('');
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [attachedContext, setAttachedContext] = useState<string | null>(null);
+  const [attachedFileName, setAttachedFileName] = useState<string | null>(null);
+
+  // Weekly reset check & Recharge countdown
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const elapsed = now - tokenStats.weekStart;
+      
+      if (elapsed > WEEK_IN_MS) {
+        setTokenStats({ used: 0, weekStart: now });
+      } else {
+        const remaining = WEEK_IN_MS - elapsed;
+        const days = Math.floor(remaining / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        setTimeToRecharge(`${days}d ${hours}h`);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [tokenStats.weekStart]);
 
   useEffect(() => {
     localStorage.setItem('rspo_token_stats', JSON.stringify(tokenStats));
@@ -131,11 +163,49 @@ const App: React.FC = () => {
       {
         id: 'initial-' + Date.now(),
         role: 'assistant',
-        content: `Hello! I am your **RSPO Assistant**. To ensure I provide the correct level of technical detail, please select your intended operation:\n\n1️⃣ **RSPO Indicator Verification** (Audit-style evidence check)\n2️⃣ **Activity Compliance Check** (Ensuring site activities follow rules)\n3️⃣ **Findings Justification** (Drafting responses to audit findings/NCs)\n4️⃣ **General RSPO Enquiry** (Quick questions & general summaries)\n\nWhich option are we working on today?`,
+        content: `Hello! I am your **RSPO Assistant**. To ensure I provide the correct level of technical detail, please select your intended operation:\n\n1️⃣ **RSPO Indicator Verification** (Audit-style evidence check)\n2️⃣ **Activity Compliance Check** (Ensuring site activities follow rules)\n3️⃣ **Findings Justification** (Drafting responses to audit findings/NCs)\n4️⃣ **General RSPO Enquiry** (Quick questions & general summaries)\n\n💡 **Pro Tip**: For maximum accuracy with technical indicators, you can upload the official RSPO Standard PDF into the **Document Vault** from the Toolbox below! I also verify text directly from **rspo.org** via Google Search.`,
         timestamp: new Date(),
         options: ONBOARDING_OPTIONS
       }
     ]);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File is too large. Please limit uploads to 5MB.");
+      return;
+    }
+
+    setIsProcessingFile(true);
+    setStatus(AppStatus.LOADING);
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        try {
+          const base64Data = result.substring(result.indexOf(',') + 1);
+          const extractedText = await extractTextFromImage(base64Data, file.type);
+          
+          if (extractedText) {
+            setAttachedContext(`FILE CONTEXT (${file.name}):\n${extractedText}`);
+            setAttachedFileName(file.name);
+            setInput(prev => `[Question regarding ${file.name}] `);
+            setTimeout(() => mainInputRef.current?.focus(), 100);
+          }
+        } catch (err: any) {
+          alert(err.message || "Failed to extract content from file.");
+        } finally {
+          setIsProcessingFile(false);
+          setStatus(AppStatus.IDLE);
+        }
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const toggleTheme = () => {
@@ -162,7 +232,6 @@ const App: React.FC = () => {
     setActiveMode(newMode);
     setIsModeMenuOpen(false);
     
-    // Clear options from last message if they were showing
     setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, options: undefined } : m));
 
     const pivotMsg: Message = {
@@ -210,29 +279,30 @@ const App: React.FC = () => {
   };
 
   const handleSend = async (forcedQuery?: string, isNC?: boolean) => {
-    const query = forcedQuery || input;
-    if (!query.trim() || status === AppStatus.LOADING || !user) return;
+    const queryText = forcedQuery || input;
+    if (!queryText.trim() || status === AppStatus.LOADING || !user) return;
 
-    const cleanCmd = query.trim().toLowerCase();
+    const cleanCmd = queryText.trim().toLowerCase();
     if (cleanCmd === '/restart' || cleanCmd === 'change mode' || cleanCmd === '/mode') {
       setInput('');
       handleNewChat();
       return;
     }
 
-    if (tokenStats.used >= user.tokenLimit && !query.startsWith('System:')) {
-      handleShowModal('settings', 'billing');
+    if (isLimitReached && !queryText.startsWith('System:')) {
+      handleShowModal('payment');
       return;
     }
 
-    let finalQuery = query;
+    const fullQuery = attachedContext ? `${attachedContext}\n\nUSER QUESTION: ${queryText}` : queryText;
 
-    if (!query.startsWith('System:') && !query.startsWith('MODE_')) {
-      finalQuery = `MODE_${activeMode}: ${query}`;
+    let finalQuery = fullQuery;
+    if (!queryText.startsWith('System:') && !queryText.startsWith('MODE_')) {
+      finalQuery = `MODE_${activeMode}: ${fullQuery}`;
     }
 
-    if (!query.startsWith('System:')) {
-      const displayContent = query.includes('MODE_') ? query.split(': ')[1] : query;
+    if (!queryText.startsWith('System:')) {
+      const displayContent = queryText.includes('MODE_') ? queryText.split(': ')[1] : queryText;
       const userMsg: Message = {
         id: Date.now().toString(),
         role: 'user',
@@ -244,23 +314,34 @@ const App: React.FC = () => {
     }
 
     setInput('');
+    setAttachedContext(null);
+    setAttachedFileName(null);
     setStatus(AppStatus.LOADING);
 
     try {
       const historyArr = messages.map(m => ({ role: m.role, content: m.content }));
-      const response = await askRSPOAssistant(finalQuery, activeStandard, language, user.tier, policies, historyArr);
+      const { text, groundingUrls } = await askRSPOAssistant(
+        finalQuery, 
+        activeStandard, 
+        language, 
+        user.tier, 
+        policies, 
+        historyArr, 
+        user.nationalInterpretations
+      );
       
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: response,
+        content: text,
         timestamp: new Date(),
-        showNCDraftLink: activeMode === 'ARGUMENTATIVE'
+        showNCDraftLink: activeMode === 'ARGUMENTATIVE',
+        groundingUrls
       };
       
       setMessages(prev => [...prev, assistantMsg]);
 
-      const cost = calculateTokenCost(finalQuery, response);
+      const cost = calculateTokenCost(finalQuery, text);
       setTokenStats(prev => ({ ...prev, used: prev.used + cost }));
 
     } catch (error) {
@@ -294,8 +375,7 @@ const App: React.FC = () => {
 
     if (!hasPremiumAccess && premiumTools.includes(type)) {
       if (window.confirm("UPGRADE REQUIRED\n\nThe Digital Toolbox is exclusive to Professional & Enterprise plans.\n\nWould you like to view refill options?")) {
-        setSettingsTab('billing');
-        setActiveModal('settings');
+        setActiveModal('payment');
       }
       return;
     }
@@ -305,6 +385,21 @@ const App: React.FC = () => {
     }
     
     setActiveModal(type);
+  };
+
+  const handlePaymentSuccess = (newTier: UserTier, tokens: number, invoice: Invoice) => {
+    if (!user) return;
+    const updatedUser: User = {
+      ...user,
+      tier: newTier,
+      tokenLimit: tokens,
+      tokensUsed: 0,
+      subscriptionStatus: 'Active',
+      invoices: [invoice, ...(user.invoices || [])]
+    };
+    handleUpdateUser(updatedUser);
+    setTokenStats({ used: 0, weekStart: Date.now() });
+    setActiveModal(null);
   };
 
   if (!user) {
@@ -318,6 +413,7 @@ const App: React.FC = () => {
             tokenLimit: freePlan.tokens, 
             tokensUsed: 0, 
             tier: 'Free' as const,
+            createdAt: Date.now(),
             invoices: []
           };
           handleUpdateUser(fullUser); 
@@ -327,7 +423,8 @@ const App: React.FC = () => {
     );
   }
 
-  const isLimitReached = tokenStats.used >= user.tokenLimit;
+  const isTrialExpired = user.tier === 'Free' && (Date.now() - (user.createdAt || Date.now())) > MONTH_IN_MS;
+  const isLimitReached = tokenStats.used >= user.tokenLimit || isTrialExpired;
   const currentModeOption = ONBOARDING_OPTIONS.find(o => o.value === activeMode);
 
   return (
@@ -347,7 +444,7 @@ const App: React.FC = () => {
           onToggleTheme={toggleTheme}
         />
         
-        <ClauseSearch activeStandard={activeStandard} onSelect={(q) => handleSend(q)} />
+        <ClauseSearch activeStandard={activeStandard} user={user} onSelect={(q) => handleSend(q)} />
 
         <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50/50 dark:bg-slate-950/40 relative scrollbar-hide">
           <div className="max-w-6xl mx-auto">
@@ -361,28 +458,51 @@ const App: React.FC = () => {
             ))}
             {status === AppStatus.LOADING && (
               <div className="flex justify-start mb-6 animate-pulse">
-                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-[11px] font-bold text-slate-400">
-                  AI ANALYZING...
+                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-[11px] font-bold text-slate-400 flex items-center gap-3">
+                  <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                  {isProcessingFile ? "EXTRACTING CONTENT..." : "AI ANALYZING..."}
                 </div>
               </div>
             )}
             
             {isLimitReached && (
-              <div className="animate-in fade-in zoom-in slide-in-from-bottom-4 duration-500 bg-emerald-800 text-white p-8 rounded-[2.5rem] shadow-2xl border-4 border-emerald-400/30 text-center space-y-4 my-8 mx-2 relative overflow-hidden">
+              <div className="animate-in fade-in zoom-in slide-in-from-bottom-4 duration-500 bg-slate-900 text-white p-10 rounded-[3rem] shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] border-4 border-emerald-500/20 text-center space-y-6 my-10 mx-2 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-pulse"></div>
-                <div className="w-16 h-16 bg-white/10 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-white/20">
-                  <i className="fa-solid fa-crown text-3xl text-emerald-400"></i>
+                
+                <div className="flex justify-center -space-x-3 mb-2">
+                   <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 backdrop-blur-md">
+                    <i className={`fa-solid ${isTrialExpired ? 'fa-hourglass-end' : 'fa-chart-pie'} text-2xl text-emerald-400`}></i>
+                  </div>
+                   <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center border-4 border-slate-900 shadow-xl z-10">
+                    <i className="fa-solid fa-bolt-lightning text-2xl text-white"></i>
+                  </div>
                 </div>
-                <h4 className="text-xl font-black uppercase tracking-tight">Intelligence Payload Depleted</h4>
-                <p className="text-emerald-100 text-xs leading-relaxed max-sm mx-auto">
-                  You've consumed your {user.tokenLimit.toLocaleString()} token allocation. Upgrade to a **Professional** or **Enterprise** pack for high-volume audit analysis.
+
+                <div className="space-y-2">
+                  <h4 className="text-2xl font-black uppercase tracking-tight leading-none">
+                    {isTrialExpired ? '1-Month Trial Concluded' : 'Intelligence Budget Depleted'}
+                  </h4>
+                  <p className="text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em]">Next Step: Starter Workspace Refill</p>
+                </div>
+
+                <p className="text-slate-400 text-xs leading-relaxed max-w-sm mx-auto font-medium">
+                  {isTrialExpired 
+                    ? `Your 1-month evaluation period of the RSPO Assistant has ended. Upgrade to the **Starter Plan** to resume your audit queries.`
+                    : `You've utilized your weekly 1,000 token allowance. Transition to the **Starter Plan** for a 50x larger intelligence capacity.`}
                 </p>
-                <button 
-                  onClick={() => handleShowModal('settings', 'billing')}
-                  className="w-full py-4 bg-white text-emerald-900 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl hover:bg-emerald-50 transition-all active:scale-95"
-                >
-                  Upgrade Intelligence Pack
-                </button>
+
+                <div className="pt-2">
+                  <button 
+                    onClick={() => handleShowModal('payment')}
+                    className="group relative w-full py-5 bg-emerald-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-widest shadow-[0_15px_30px_-5px_rgba(16,185,129,0.4)] hover:bg-emerald-500 transition-all active:scale-95 flex items-center justify-center gap-3"
+                  >
+                    Upgrade to Starter Plan
+                    <i className="fa-solid fa-arrow-right group-hover:translate-x-1 transition-transform"></i>
+                  </button>
+                  <p className="mt-4 text-[9px] text-slate-500 font-bold uppercase tracking-widest opacity-60">
+                    {isTrialExpired ? 'Access expired' : `Next reset in ${timeToRecharge}`}
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -390,7 +510,6 @@ const App: React.FC = () => {
 
         <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 p-4 md:p-6 shrink-0 no-print relative">
           
-          {/* Mode Pull-up Menu */}
           {isModeMenuOpen && (
             <>
               <div className="fixed inset-0 z-[140]" onClick={() => setIsModeMenuOpen(false)}></div>
@@ -415,6 +534,18 @@ const App: React.FC = () => {
           )}
 
           <div className="max-w-6xl mx-auto">
+            {attachedContext && (
+               <div className="mb-3 px-4 py-2 bg-emerald-100 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center justify-between animate-in slide-in-from-bottom-2 duration-300">
+                  <div className="flex items-center gap-3">
+                    <i className="fa-solid fa-file-circle-check text-emerald-600"></i>
+                    <p className="text-[10px] font-bold text-emerald-800 dark:text-emerald-200 uppercase tracking-widest truncate max-w-[200px] md:max-w-none">
+                      Context Loaded: {attachedFileName} — Add text to refine your query
+                    </p>
+                  </div>
+                  <button onClick={() => { setAttachedContext(null); setAttachedFileName(null); setInput(''); }} className="text-emerald-600 hover:text-rose-500 transition-colors p-1"><i className="fa-solid fa-xmark"></i></button>
+               </div>
+            )}
+
             <div className="flex gap-4 items-center">
               <button
                 onClick={() => setIsModeMenuOpen(!isModeMenuOpen)}
@@ -425,21 +556,38 @@ const App: React.FC = () => {
                 <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest">{currentModeOption?.label || 'Mode'}</span>
               </button>
               
-              <div className="flex-1 relative">
+              <div className="flex-1 relative flex items-center">
                 <input
+                  ref={mainInputRef}
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                  disabled={isLimitReached}
-                  placeholder={isLimitReached ? "Upgrade to continue..." : `Query RSPO Assistant...`}
-                  className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-base disabled:opacity-50 transition-all shadow-inner"
+                  disabled={isLimitReached || isProcessingFile}
+                  placeholder={isLimitReached ? "Upgrade required..." : isProcessingFile ? "Digitizing content..." : `Ask about audit finding or attached file...`}
+                  className="w-full pl-6 pr-14 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-base disabled:opacity-50 transition-all shadow-inner"
+                />
+                
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLimitReached || isProcessingFile}
+                  className="absolute right-4 w-9 h-9 flex items-center justify-center rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-all active:scale-90 disabled:opacity-50"
+                  title="Attach File or Image"
+                >
+                   <i className={`fa-solid ${isProcessingFile ? 'fa-circle-notch fa-spin text-emerald-500' : 'fa-paperclip'}`}></i>
+                </button>
+                <input 
+                  ref={fileInputRef} 
+                  type="file" 
+                  className="hidden" 
+                  accept="image/*,.pdf,.doc,.docx,.txt" 
+                  onChange={handleFileUpload} 
                 />
               </div>
 
               <button
                 onClick={() => handleSend()}
-                disabled={status === AppStatus.LOADING || !input.trim() || isLimitReached}
+                disabled={status === AppStatus.LOADING || !input.trim() || isLimitReached || isProcessingFile}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white w-14 h-14 flex items-center justify-center rounded-2xl shadow-xl transition-all disabled:grayscale disabled:opacity-50 active:scale-90"
               >
                 <i className="fa-solid fa-paper-plane text-lg"></i>
@@ -455,12 +603,18 @@ const App: React.FC = () => {
               
               <div className="flex items-center gap-6">
                 <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Tokens: <span className={isLimitReached ? 'text-rose-500' : 'text-emerald-600'}>{tokenStats.used.toLocaleString()} / {user.tokenLimit.toLocaleString()}</span>
+                  {user.tier === 'Free' ? `Weekly Budget: ` : `Tokens: `}
+                  <span className={isLimitReached ? 'text-rose-500' : 'text-emerald-600'}>
+                    {(user.tokenLimit - tokenStats.used).toLocaleString()} Left
+                  </span>
+                  {user.tier === 'Free' && !isTrialExpired && (
+                    <span className="ml-2 text-[8px] opacity-60">Recharge in {timeToRecharge}</span>
+                  )}
                 </div>
                 <div className="w-24 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                   <div 
                     className={`h-full transition-all duration-500 ${isLimitReached ? 'bg-rose-500' : 'bg-emerald-500'}`} 
-                    style={{ width: `${Math.min((tokenStats.used / user.tokenLimit) * 100, 100)}%` }}
+                    style={{ width: `${Math.max(0, 100 - (tokenStats.used / user.tokenLimit) * 100)}%` }}
                   />
                 </div>
               </div>
@@ -479,6 +633,9 @@ const App: React.FC = () => {
         )}
         {activeModal === 'settings' && (
           <SettingsModal user={user} onUpdateUser={handleUpdateUser} onLogout={handleLogout} onClose={() => setActiveModal(null)} initialTab={settingsTab} />
+        )}
+        {activeModal === 'payment' && (
+          <PaymentGateway user={user} onPaymentSuccess={handlePaymentSuccess} onClose={() => setActiveModal(null)} />
         )}
         <HistoryDrawer 
           isOpen={activeModal === 'history'} 

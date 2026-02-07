@@ -1,24 +1,35 @@
 
 import React from 'react';
-import { MOCK_KNOWLEDGE_BASE } from '../constants';
-import { Standard } from '../types';
+import { MOCK_KNOWLEDGE_BASE, NATIONAL_INTERPRETATIONS } from '../constants';
+import { Standard, User } from '../types';
 
 interface ClauseSearchProps {
   activeStandard: Standard;
+  user: User;
   onSelect: (query: string) => void;
 }
 
-const ClauseSearch: React.FC<ClauseSearchProps> = ({ activeStandard, onSelect }) => {
+const ClauseSearch: React.FC<ClauseSearchProps> = ({ activeStandard, user, onSelect }) => {
   const filteredClauses = MOCK_KNOWLEDGE_BASE.filter(c => c.standardId === activeStandard.id);
+  const activeNI = NATIONAL_INTERPRETATIONS.find(ni => ni.id === user.nationalInterpretations[0]);
 
   return (
     <div className="flex flex-col gap-3 p-4 md:px-8 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm relative z-10">
       <div className="flex items-center justify-between">
-        <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase flex items-center gap-3 tracking-[0.2em]">
+        <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase flex items-center gap-3 tracking-[0.2em] truncate mr-4">
           <i className="fa-solid fa-bookmark text-emerald-500 dark:text-emerald-400"></i>
-          {activeStandard.shortName} Reference Deck
+          <span className="truncate">
+            {activeStandard.shortName} 
+            {activeNI && (
+              <>
+                <span className="mx-2 text-slate-300 dark:text-slate-700">•</span>
+                <span className="text-emerald-600 dark:text-emerald-400">{activeNI.name}</span>
+              </>
+            )}
+            <span className="ml-2">Reference Deck</span>
+          </span>
         </label>
-        <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-3 py-1 rounded-full font-black uppercase tracking-widest">
+        <span className="flex-shrink-0 text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-3 py-1 rounded-full font-black uppercase tracking-widest hidden xs:block">
           {filteredClauses.length} Indicators Loaded
         </span>
       </div>

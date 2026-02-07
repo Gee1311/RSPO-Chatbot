@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import StandardSelector from './StandardSelector';
 import LanguageSelector from './LanguageSelector';
 import { Standard, User, ModalType, Language, SettingsTab } from '../types';
+import { NATIONAL_INTERPRETATIONS } from '../constants';
 
 interface HeaderProps {
   activeStandard: Standard;
@@ -46,6 +47,8 @@ const Header: React.FC<HeaderProps> = ({
     }
   };
 
+  const activeNI = NATIONAL_INTERPRETATIONS.find(ni => ni.id === user.nationalInterpretations[0]);
+
   return (
     <header className="bg-emerald-800 dark:bg-emerald-950 text-white shadow-md relative z-[100] no-print">
       <div className="w-full px-6 md:px-8 py-3">
@@ -66,10 +69,12 @@ const Header: React.FC<HeaderProps> = ({
               </div>
               <div className="hidden xs:block text-left">
                 <h1 className="font-black text-sm md:text-lg leading-none tracking-tight">RSPO Chat</h1>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`text-[8px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md border ${getTierStyles(user.tier)}`}>
-                    {user.tier}
-                  </span>
+                <div className="flex flex-col gap-1 mt-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[8px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md border ${getTierStyles(user.tier)}`}>
+                      {user.tier}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -78,9 +83,9 @@ const Header: React.FC<HeaderProps> = ({
           {/* Right Controls */}
           <div className="flex items-center gap-2 md:gap-4 flex-shrink-0 justify-end">
             <div className="flex items-center gap-2 md:gap-3">
-              {/* Refill / Upgrade Button */}
+              {/* Refill / Upgrade Button - NOW DIRECTLY TRIGGERS PAYMENT */}
               <button
-                onClick={() => onShowModal('settings', 'billing')}
+                onClick={() => onShowModal('payment')}
                 className="flex items-center gap-2 px-3 md:px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white rounded-xl shadow-lg shadow-amber-900/20 transition-all active:scale-95 group border border-white/20"
                 title="Refill Intelligence Pack"
               >
@@ -135,16 +140,21 @@ const Header: React.FC<HeaderProps> = ({
                           <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate uppercase tracking-widest font-bold mt-0.5">{user.role}</p>
                         </div>
                       </div>
+                      {activeNI && (
+                        <a 
+                          href={activeNI.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="mt-1 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-100 dark:border-emerald-800 flex items-center gap-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors group"
+                        >
+                           <i className="fa-solid fa-earth-asia text-emerald-600 dark:text-emerald-400 text-[10px]"></i>
+                           <p className="text-[9px] font-black text-emerald-800 dark:text-emerald-200 uppercase truncate flex-1">{activeNI.name}</p>
+                           <i className="fa-solid fa-arrow-up-right-from-square text-[7px] text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                        </a>
+                      )}
                     </div>
                     
                     <div className="py-2">
-                      <div className="xs:hidden border-b border-slate-100 dark:border-slate-800 pb-3 mb-2 px-5 pt-2">
-                         <p className="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest">Workspace Context</p>
-                         <div className="flex flex-col gap-2">
-                           <LanguageSelector current={language} onSelect={onLanguageChange} />
-                           <StandardSelector selectedId={activeStandard.id} onSelect={onStandardChange} />
-                         </div>
-                      </div>
                       <button 
                         onClick={() => { onShowModal('settings'); setShowProfile(false); }} 
                         className="w-full text-left px-5 py-3 text-xs text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-4 font-bold"
@@ -152,10 +162,10 @@ const Header: React.FC<HeaderProps> = ({
                         <i className="fa-solid fa-gear text-emerald-600 w-5 text-center text-sm"></i> Account Settings
                       </button>
                       <button 
-                        onClick={() => { onShowModal('settings', 'billing'); setShowProfile(false); }} 
+                        onClick={() => { onShowModal('payment'); setShowProfile(false); }} 
                         className="w-full text-left px-5 py-3 text-xs text-slate-700 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-900/10 transition-colors flex items-center gap-4 font-bold"
                       >
-                        <i className="fa-solid fa-credit-card text-amber-500 w-5 text-center text-sm"></i> Billing & Refills
+                        <i className="fa-solid fa-credit-card text-amber-500 w-5 text-center text-sm"></i> Refill Intelligence
                       </button>
                       <button 
                         onClick={() => { onExportHistory(); setShowProfile(false); }} 

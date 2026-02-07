@@ -1,7 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { SYSTEM_INSTRUCTION, MOCK_KNOWLEDGE_BASE, LANGUAGE_MAP } from "../constants";
-import { Standard, Language, PolicyDocument, RSPOClause, UserTier } from "../types";
+import { SYSTEM_INSTRUCTION, MOCK_KNOWLEDGE_BASE, LANGUAGE_MAP, NATIONAL_INTERPRETATIONS } from "../constants";
+import { Standard, Language, PolicyDocument, RSPOClause, UserTier, GroundingUrl, User } from "../types";
 
 export const askRSPOAssistant = async (
   question: string, 
@@ -9,13 +9,14 @@ export const askRSPOAssistant = async (
   language: Language,
   userTier: UserTier,
   policies: PolicyDocument[] = [],
-  history: { role: string; content: string }[] = []
-) => {
+  history: { role: string; content: string }[] = [],
+  selectedNIs: string[] = []
+): Promise<{ text: string; groundingUrls?: GroundingUrl[] }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const targetLanguageName = LANGUAGE_MAP[language] || 'English';
 
-  // Identify Mode if present
+  // Identify Mode
   let activeMode = 'GENERAL';
   let cleanQuestion = question;
   
@@ -33,47 +34,81 @@ export const askRSPOAssistant = async (
     cleanQuestion = question.replace('MODE_CONCISE:', '').trim();
   }
   
-  const matchingClauses = MOCK_KNOWLEDGE_BASE.filter(clause => 
-    clause.standardId === activeStandard.id && (
-      cleanQuestion.toLowerCase().includes(clause.id.toLowerCase()) || 
-      cleanQuestion.toLowerCase().includes(clause.title.toLowerCase())
-    )
-  );
+  // Use semantic selection for better accuracy
+  let matchingClauses: RSPOClause[] = [];
+  try {
+    const relevantIds = await selectRelevantClauses(cleanQuestion, activeStandard.id);
+    matchingClauses = MOCK_KNOWLEDGE_BASE.filter(c => relevantIds.includes(c.id));
+  } catch (e) {
+    matchingClauses = MOCK_KNOWLEDGE_BASE.filter(clause => 
+      clause.standardId === activeStandard.id && (
+        cleanQuestion.toLowerCase().includes(clause.id.toLowerCase()) || 
+        cleanQuestion.toLowerCase().includes(clause.title.toLowerCase())
+      )
+    );
+  }
+
+  const niContext = selectedNIs.length > 0 
+    ? `\nSELECTED NATIONAL INTERPRETATIONS (NI):\n${selectedNIs.map(id => {
+        const ni = NATIONAL_INTERPRETATIONS.find(n => n.id === id);
+        return ni ? `- ${ni.name} (${ni.url})` : id;
+      }).join('\n')}\n*Note: Use these specific documents for regional indicator definitions.*`
+    : '\n(No specific National Interpretations selected. Use global P&C documents.)';
 
   const policyContext = policies.length > 0 
-    ? `\nCompany Specific Policies Provided:\n${policies.map(p => `${p.name} (${p.type}): ${p.content}`).join('\n')}`
-    : '';
+    ? `\nCOMPANY CONTEXT (UPLOADED DOCUMENTS):\n${policies.map(p => `[FILE: ${p.name}] TYPE: ${p.type}\nCONTENT: ${p.content}`).join('\n---\n')}`
+    : '\n(No specific company policies provided. Using general RSPO framework.)';
 
   const contextPrompt = `
-Active Standard: ${activeStandard.name} (${activeStandard.year})
+ACTIVE_STANDARD: ${activeStandard.name} (${activeStandard.year})
 OPERATIONAL_MODE: ${activeMode}
 OUTPUT_LANGUAGE: ${targetLanguageName}
+
+${niContext}
 ${policyContext}
 
-Retrieved RSPO Context Documents:
+OFFICIAL RSPO INDICATORS PROVIDED FOR REFERENCE:
 ${matchingClauses.length > 0 
-  ? matchingClauses.map(c => `ID: ${c.id}, Content: ${c.description}`).join('\n')
-  : 'Search relevant RSPO requirements for ' + activeStandard.shortName}
+  ? matchingClauses.map(c => `INDICATOR_ID: ${c.id}\nTITLE: ${c.title}\nREQUIREMENT: ${c.description}`).join('\n\n')
+  : 'Note: Specific matching Indicators were not found in the local database. Use Google Search to find the latest text from rspo.org.'}
 
-REMINDER: Apply the ${activeMode} framework as defined in your instructions.
+STRICT TECHNICAL DIRECTIVE:
+If the user asks for a specific indicator number or requirement, use the Google Search tool to verify it against the official RSPO resources (https://rspo.org). If a National Interpretation is selected, prioritize results matching that specific NI PDF content from rspo.org. Hallucinations are strictly forbidden.
 `;
 
-  // Select lower cost model for Free pack users
-  const modelToUse = userTier === 'Free' ? 'gemini-flash-lite-latest' : 'gemini-3-flash-preview';
+  // Using Pro model for search grounding and complex auditing tasks
+  const modelToUse = userTier === 'Free' ? 'gemini-3-flash-preview' : 'gemini-3-pro-preview';
 
   try {
     const response = await ai.models.generateContent({
       model: modelToUse,
       contents: [{
-        parts: [{ text: `${contextPrompt}\n\nIMPORTANT: YOU MUST RESPOND ONLY IN ${targetLanguageName.toUpperCase()}.\n\nUser Question: ${cleanQuestion}` }]
+        parts: [{ text: `${contextPrompt}\n\nUSER QUESTION: ${cleanQuestion}` }]
       }],
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.2,
+        temperature: 0.1, 
+        tools: [{ googleSearch: {} }]
       },
     });
 
-    return response.text || "I'm sorry, I couldn't generate a response based on the available RSPO documents.";
+    const text = response.text || "I'm sorry, I couldn't generate a response based on the available RSPO documents.";
+    
+    // Extract grounding URLs
+    const groundingUrls: GroundingUrl[] = [];
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (chunks) {
+      chunks.forEach((chunk: any) => {
+        if (chunk.web) {
+          groundingUrls.push({
+            title: chunk.web.title || 'Official RSPO Resource',
+            uri: chunk.web.uri
+          });
+        }
+      });
+    }
+
+    return { text, groundingUrls: groundingUrls.length > 0 ? groundingUrls : undefined };
   } catch (error) {
     console.error("Gemini API Error:", error);
     throw new Error("Failed to connect to the RSPO Compliance Assistant.");
@@ -85,7 +120,7 @@ export const generateNCDraft = async (finding: string, standard: Standard, langu
   const targetLanguageName = LANGUAGE_MAP[language] || 'English';
 
   const policyContext = policies.length > 0 
-    ? `Available Company Context:\n${policies.map(p => `${p.name}: ${p.content.substring(0, 500)}`).join('\n')}`
+    ? `Available Company Context:\n${policies.map(p => `${p.name}: ${p.content.substring(0, 1000)}`).join('\n')}`
     : '';
 
   const prompt = `You are an RSPO Compliance Expert. Take the following audit finding and transform it into a structured professional management response.
@@ -175,11 +210,10 @@ export const selectRelevantClauses = async (prompt: string, standardId: string):
   const availableClauses = MOCK_KNOWLEDGE_BASE.filter(c => c.standardId === standardId);
   
   const selectionPrompt = `
-    You are an RSPO Audit Lead. 
-    The auditor wants to focus on: "${prompt}"
+    Analyze this audit query: "${prompt}"
     
-    From the following list of available RSPO Indicators for this standard, select the 10 MOST RELEVANT indicators that need to be verified during this specific focused audit.
-    If fewer than 10 are relevant, select only those.
+    From the list of RSPO Indicators for ${standardId}, identify which are directly relevant. 
+    If none match exactly, pick the closest matching indicators.
     
     Available Indicators:
     ${availableClauses.map(c => `ID: ${c.id}, Title: ${c.title}`).join('\n')}
@@ -202,7 +236,7 @@ export const selectRelevantClauses = async (prompt: string, standardId: string):
     return JSON.parse(response.text || "[]");
   } catch (error) {
     console.error("Selection Error:", error);
-    return availableClauses.slice(0, 10).map(c => c.id);
+    return availableClauses.slice(0, 5).map(c => c.id);
   }
 };
 
@@ -212,13 +246,12 @@ export const generateAuditChecklist = async (clauses: RSPOClause[], language: La
 
   const context = prompt ? `The specific audit focus is: "${prompt}". ` : "";
 
-  const generatorPrompt = `${context}Convert the following RSPO clauses into a practical, actionable audit checklist for a field auditor. 
-  Each item should be a "Verification Point" (what the auditor should physically check, observe, or ask for in the field).
+  const generatorPrompt = `${context}Convert these RSPO clauses into actionable "Verification Points" for a field auditor.
   
   Clauses:
   ${clauses.map(c => `[${c.id}] ${c.title}: ${c.description}`).join('\n')}
   
-  Output the response as a JSON array of objects with keys: "clauseId", "checkpoint".
+  Output as JSON array of objects with keys: "clauseId", "checkpoint".
   RESPOND ONLY IN ${targetLanguageName.toUpperCase()}.`;
 
   try {
